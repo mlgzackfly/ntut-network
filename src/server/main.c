@@ -9,9 +9,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/eventfd.h>
 #include <sys/wait.h>
 #include <unistd.h>
+
+#ifdef __linux__
+#include <sys/eventfd.h>
+#endif
 
 static volatile sig_atomic_t g_stop = 0;
 static void on_sig(int sig) {
@@ -89,19 +92,38 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  int notify_efd = eventfd(0, EFD_NONBLOCK);
-  if (notify_efd < 0) {
+  int notify_rfd = -1;
+  int notify_wfd = -1;
+#ifdef __linux__
+  int efd = eventfd(0, EFD_NONBLOCK);
+  if (efd < 0) {
     LOG_ERROR("eventfd failed: %s", strerror(errno));
     close(listen_fd);
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;
   }
+  notify_rfd = efd;
+  notify_wfd = efd;
+#else
+  int pfd[2];
+  if (pipe(pfd) != 0) {
+    LOG_ERROR("pipe failed: %s", strerror(errno));
+    close(listen_fd);
+    ns_shm_close(&shm_h, cfg.shm_name, true);
+    return 1;
+  }
+  notify_rfd = pfd[0];
+  notify_wfd = pfd[1];
+#endif
 
   LOG_INFO("Server starting: port=%u workers=%d shm=%s", cfg.port, cfg.workers, cfg.shm_name);
 
   pid_t *pids = (pid_t *)calloc((size_t)cfg.workers, sizeof(pid_t));
   if (!pids) {
-    close(notify_efd);
+    if (notify_rfd >= 0) close(notify_rfd);
+#ifndef __linux__
+    if (notify_wfd >= 0) close(notify_wfd);
+#endif
     close(listen_fd);
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;
@@ -116,7 +138,7 @@ int main(int argc, char **argv) {
     }
     if (pid == 0) {
       // worker
-      (void)worker_run(w, listen_fd, notify_efd, shm_h.shm, &cfg);
+      (void)worker_run2(w, listen_fd, notify_rfd, notify_wfd, shm_h.shm, &cfg);
       _exit(0);
     }
     pids[w] = pid;
@@ -141,7 +163,12 @@ int main(int argc, char **argv) {
   }
 
   free(pids);
-  close(notify_efd);
+#ifdef __linux__
+  close(notify_rfd);
+#else
+  close(notify_rfd);
+  close(notify_wfd);
+#endif
   close(listen_fd);
   ns_shm_close(&shm_h, cfg.shm_name, true);
   LOG_INFO("Shutdown complete.");

@@ -5,13 +5,11 @@
 #include "proto.h"
 
 #include <errno.h>
-#include <linux/limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
-#include <sys/eventfd.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <time.h>
@@ -134,7 +132,7 @@ static uint64_t rd_u64(const uint8_t *p, size_t n, size_t off, bool *ok) {
   return ns_be64(p + off);
 }
 
-static void handle_request(ns_shm_t *shm, int notify_efd, conn_t *c,
+static void handle_request(ns_shm_t *shm, int notify_wfd, conn_t *c,
                            const ns_header_t *hdr, const uint8_t *body, uint32_t body_len) {
   const uint16_t opcode = ns_be16(&hdr->opcode);
   const uint64_t req_id = ns_be64(&hdr->req_id);
@@ -256,7 +254,7 @@ static void handle_request(ns_shm_t *shm, int notify_efd, conn_t *c,
       ns_chat_append(shm, room, c->user_id, (const char *)(body + 4), mlen);
       // notify all workers
       uint64_t one = 1;
-      (void)write(notify_efd, &one, sizeof(one));
+      (void)write(notify_wfd, &one, sizeof(one));
       send_simple_response(c, OP_CHAT_SEND, ST_OK, req_id, NULL, 0);
       break;
     }
@@ -342,7 +340,7 @@ static void handle_request(ns_shm_t *shm, int notify_efd, conn_t *c,
   }
 }
 
-static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_efd, conn_t *c, const server_cfg_t *cfg) {
+static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_wfd, conn_t *c, const server_cfg_t *cfg) {
   // Read
   while (true) {
     ssize_t n = recv(c->fd, c->rbuf + c->rlen, sizeof(c->rbuf) - c->rlen, 0);
@@ -377,7 +375,7 @@ static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_efd, conn_t *c, co
       return -1;
     }
 
-    handle_request(shm, notify_efd, c, &hdr, body, body_len);
+    handle_request(shm, notify_wfd, c, &hdr, body, body_len);
 
     off += frame_len;
   }
@@ -407,6 +405,11 @@ static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_efd, conn_t *c, co
 }
 
 int worker_run(int worker_id, int listen_fd, int notify_efd, ns_shm_t *shm, const server_cfg_t *cfg) {
+  // Backwards-compatible wrapper: on Linux eventfd uses same fd for read/write.
+  return worker_run2(worker_id, listen_fd, notify_efd, notify_efd, shm, cfg);
+}
+
+int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns_shm_t *shm, const server_cfg_t *cfg) {
   char pname[64];
   snprintf(pname, sizeof(pname), "server-w%d", worker_id);
   log_set_program(pname);
@@ -428,14 +431,14 @@ int worker_run(int worker_id, int listen_fd, int notify_efd, ns_shm_t *shm, cons
     return -1;
   }
 
-  // add listen fd and notify efd
+  // add listen fd and notify read fd
   (void)net_set_nonblocking(listen_fd, true);
   if (ep_add(epfd, listen_fd, EPOLLIN, (void *)(uintptr_t)listen_fd) != 0) {
     free(fdmap);
     close(epfd);
     return -1;
   }
-  if (ep_add(epfd, notify_efd, EPOLLIN, (void *)(uintptr_t)notify_efd) != 0) {
+  if (ep_add(epfd, notify_rfd, EPOLLIN, (void *)(uintptr_t)notify_rfd) != 0) {
     free(fdmap);
     close(epfd);
     return -1;
@@ -487,9 +490,9 @@ int worker_run(int worker_id, int listen_fd, int notify_efd, ns_shm_t *shm, cons
         continue;
       }
 
-      if (ptr == (void *)(uintptr_t)notify_efd) {
+      if (ptr == (void *)(uintptr_t)notify_rfd) {
         uint64_t val = 0;
-        while (read(notify_efd, &val, sizeof(val)) > 0) {
+        while (read(notify_rfd, &val, sizeof(val)) > 0) {
           // drain
         }
         handle_chat_broadcast(shm, fdmap, fdcap, &last_chat_seq);
@@ -506,7 +509,7 @@ int worker_run(int worker_id, int listen_fd, int notify_efd, ns_shm_t *shm, cons
         continue;
       }
 
-      if (handle_conn_io(epfd, shm, notify_efd, c, cfg) != 0) {
+      if (handle_conn_io(epfd, shm, notify_wfd, c, cfg) != 0) {
         fdmap[fd] = NULL;
         conn_free(c);
         continue;

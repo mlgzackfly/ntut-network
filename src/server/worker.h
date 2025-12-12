@@ -13,5 +13,8 @@ typedef struct {
 } server_cfg_t;
 
 int worker_run(int worker_id, int listen_fd, int notify_efd, ns_shm_t *shm, const server_cfg_t *cfg);
+// notify_rfd is used for epoll read; notify_wfd is used to wake other workers.
+// On Linux with eventfd you can pass the same fd for both.
+int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns_shm_t *shm, const server_cfg_t *cfg);
 
 

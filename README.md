@@ -275,13 +275,13 @@ make
 ### Run server (example)
 
 ```bash
-./server --port 9000 --workers 4
+./bin/server --port 9000 --workers 4 --shm /ns_trading_chat
 ```
 
 ### Run stress client (example)
 
 ```bash
-./client --host 127.0.0.1 --port 9000 --connections 100 --threads 16 --duration 60 --mix mixed --out results.csv
+./bin/client --host 127.0.0.1 --port 9000 --connections 100 --threads 16 --duration 60 --mix mixed --out results/results.csv
 ```
 
 ---

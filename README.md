@@ -221,6 +221,22 @@ Trading:
 - client output: console summary + CSV
 - plots: `gnuplot` (or aggregate with `awk/sed`)
 
+### Real Test runner (Linux)
+
+Run the full matrix and generate plots (no Python):
+
+```bash
+bash scripts/run_real_tests.sh
+gnuplot -c scripts/plot_latency.gp results/runs.csv results/latency.png
+gnuplot -c scripts/plot_throughput.gp results/runs.csv results/throughput.png
+```
+
+Outputs:
+
+- `results/runs.csv` (aggregated metrics for each run)
+- `results/server.log` (server logs for evidence/debugging)
+- `results/latency.png`, `results/throughput.png` (plots)
+
 ---
 
 ## Auditing discussion (A++ required)

@@ -229,10 +229,30 @@ static void *thread_main(void *arg) {
   }
 
   uint64_t end_ns = now_ns() + (uint64_t)ctx->duration_s * 1000000000ull;
+  uint32_t *backoff_ms = (uint32_t *)calloc((size_t)ctx->conns, sizeof(uint32_t)); // per-connection backoff
+  if (!backoff_ms) {
+    free(fds);
+    free(req_ids);
+    free(user_ids);
+    return NULL;
+  }
+
   while (now_ns() < end_ns) {
     for (int i = 0; i < ctx->conns; i++) {
       int fd = fds[i];
       if (fd < 0) continue;
+
+      // Exponential backoff: wait if backoff > 0
+      if (backoff_ms[i] > 0) {
+        uint64_t wait_ns = (uint64_t)backoff_ms[i] * 1000000ull;
+        uint64_t wait_end = now_ns() + wait_ns;
+        while (now_ns() < wait_end && now_ns() < end_ns) {
+          usleep(10000); // 10ms
+        }
+        // Reset backoff after waiting (will be set again if ERR_SERVER_BUSY)
+        backoff_ms[i] = 0;
+        continue;
+      }
 
       uint64_t r = xorshift64(&rng);
       uint16_t opcode = OP_BALANCE;
@@ -284,18 +304,35 @@ static void *thread_main(void *arg) {
         continue;
       }
       uint16_t st = ns_be16(&rh.status);
-      free(rb);
       uint64_t t1 = now_ns();
       uint64_t us = (t1 - t0) / 1000ull;
       (void)stats_push_latency_us(&ctx->stats, us);
-      if (st == ST_OK) ctx->stats.ok++;
-      else ctx->stats.err++;
+      
+      if (st == ST_OK) {
+        ctx->stats.ok++;
+        backoff_ms[i] = 0; // Reset backoff on success
+      } else if (st == ST_ERR_SERVER_BUSY) {
+        ctx->stats.err++;
+        // Exponential backoff: start at 10ms, double each time, max 1000ms
+        if (backoff_ms[i] == 0) backoff_ms[i] = 10;
+        else {
+          backoff_ms[i] *= 2;
+          if (backoff_ms[i] > 1000) backoff_ms[i] = 1000;
+        }
+      } else {
+        ctx->stats.err++;
+        backoff_ms[i] = 0;
+      }
+      free(rb);
     }
   }
+
+  free(backoff_ms);
 
   for (int i = 0; i < ctx->conns; i++) {
     if (fds[i] >= 0) close(fds[i]);
   }
+  free(backoff_ms);
   free(fds);
   free(req_ids);
   free(user_ids);

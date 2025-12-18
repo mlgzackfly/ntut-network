@@ -52,6 +52,9 @@ int main(int argc, char **argv) {
   cfg.workers = 4;
   cfg.shm_name = "/ns_trading_chat";
   cfg.max_body_len = 65536;
+  cfg.max_connections_per_worker = 1000; // Default limit per worker
+  cfg.recv_timeout_ms = 30000; // 30 seconds
+  cfg.send_timeout_ms = 30000; // 30 seconds
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--bind") == 0 && i + 1 < argc) {
@@ -144,22 +147,64 @@ int main(int argc, char **argv) {
     pids[w] = pid;
   }
 
-  // master loop: wait for stop, restart dead workers (basic)
+  // master loop: wait for stop, restart dead workers
   while (!g_stop) {
     int status = 0;
     pid_t pid = waitpid(-1, &status, WNOHANG);
     if (pid > 0) {
-      LOG_WARN("Worker exited pid=%d status=%d (not restarting in MVP)", (int)pid, status);
+      // Find which worker exited
+      int worker_idx = -1;
+      for (int w = 0; w < cfg.workers; w++) {
+        if (pids[w] == pid) {
+          worker_idx = w;
+          break;
+        }
+      }
+      if (worker_idx >= 0) {
+        LOG_WARN("Worker %d exited pid=%d status=%d, restarting...", worker_idx, (int)pid, status);
+        // Restart the worker
+        pid_t new_pid = fork();
+        if (new_pid < 0) {
+          LOG_ERROR("Failed to restart worker %d: %s", worker_idx, strerror(errno));
+          pids[worker_idx] = 0; // Mark as failed
+        } else if (new_pid == 0) {
+          // worker
+          (void)worker_run2(worker_idx, listen_fd, notify_rfd, notify_wfd, shm_h.shm, &cfg);
+          _exit(0);
+        } else {
+          pids[worker_idx] = new_pid;
+          LOG_INFO("Worker %d restarted with pid=%d", worker_idx, (int)new_pid);
+        }
+      }
     }
     usleep(200000);
   }
 
   LOG_INFO("Shutting down...");
+  // Stop accepting new connections and signal workers to stop
   for (int w = 0; w < cfg.workers; w++) {
-    if (pids[w] > 0) kill(pids[w], SIGTERM);
+    if (pids[w] > 0) {
+      kill(pids[w], SIGTERM);
+    }
   }
+  // Wait for all workers to exit (with timeout)
   for (int w = 0; w < cfg.workers; w++) {
-    if (pids[w] > 0) waitpid(pids[w], NULL, 0);
+    if (pids[w] > 0) {
+      int waited = 0;
+      for (int i = 0; i < 50; i++) { // 5 second timeout
+        pid_t pid = waitpid(pids[w], NULL, WNOHANG);
+        if (pid == pids[w]) {
+          waited = 1;
+          break;
+        }
+        usleep(100000); // 100ms
+      }
+      if (!waited) {
+        LOG_WARN("Worker %d (pid=%d) did not exit gracefully, sending SIGKILL", w, (int)pids[w]);
+        kill(pids[w], SIGKILL);
+        waitpid(pids[w], NULL, 0);
+      }
+    }
   }
 
   free(pids);

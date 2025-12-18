@@ -234,4 +234,50 @@ void ns_txn_append(ns_shm_t *s, uint16_t opcode, uint16_t status, uint32_t from_
   pthread_mutex_unlock(&s->txn_mu);
 }
 
+int ns_check_asset_conservation(const ns_shm_t *s, int64_t *out_current_total, int64_t *out_expected_total) {
+  if (!s || !out_current_total || !out_expected_total) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  // Compute current sum of balances (need to lock all account mutexes)
+  int64_t current_total = 0;
+  for (uint32_t i = 0; i < NS_MAX_USERS; i++) {
+    pthread_mutex_lock((pthread_mutex_t *)&s->acct_mu[i]);
+    current_total += s->balance[i];
+    pthread_mutex_unlock((pthread_mutex_t *)&s->acct_mu[i]);
+  }
+
+  // Compute expected total: initial_total + deposits - withdrawals
+  // Initial total: NS_MAX_USERS * 100000 (from shm_state.c line 91)
+  const int64_t initial_total = (int64_t)NS_MAX_USERS * 100000LL;
+  int64_t deposits = 0;
+  int64_t withdrawals = 0;
+
+  pthread_mutex_lock((pthread_mutex_t *)&s->txn_mu);
+  uint64_t latest_seq = s->txn_write_seq;
+  // Scan transaction log ring buffer
+  uint64_t start_seq = (latest_seq > NS_TXN_RING_SIZE) ? (latest_seq - NS_TXN_RING_SIZE + 1) : 1;
+  for (uint64_t seq = start_seq; seq <= latest_seq; seq++) {
+    const ns_txn_event_t *e = &s->txn_ring[seq % NS_TXN_RING_SIZE];
+    if (e->seq != seq) continue; // Skip uninitialized entries
+    if (e->status != ST_OK) continue; // Only count successful transactions
+    
+    if (e->opcode == OP_DEPOSIT) {
+      deposits += e->amount;
+    } else if (e->opcode == OP_WITHDRAW) {
+      withdrawals += e->amount;
+    }
+    // TRANSFER doesn't change total (debit + credit cancel out)
+  }
+  pthread_mutex_unlock((pthread_mutex_t *)&s->txn_mu);
+
+  int64_t expected_total = initial_total + deposits - withdrawals;
+  *out_current_total = current_total;
+  *out_expected_total = expected_total;
+
+  return (current_total == expected_total) ? 0 : -1;
+}
+
+
 

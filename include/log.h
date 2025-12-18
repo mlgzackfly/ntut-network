@@ -20,3 +20,4 @@ void log_msg(log_level_t level, const char *file, int line, const char *fmt, ...
 #define LOG_ERROR(...) log_msg(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
 
 
+

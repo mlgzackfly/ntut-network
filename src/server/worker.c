@@ -19,6 +19,7 @@ typedef struct conn {
   int fd;
   bool authed;
   uint32_t user_id;
+  uint64_t last_seen_ms; // for heartbeat timeout detection
 
   uint8_t rbuf[65536];
   size_t rlen;
@@ -37,6 +38,22 @@ static uint64_t now_ms(void) {
   struct timespec ts;
   clock_gettime(CLOCK_REALTIME, &ts);
   return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)(ts.tv_nsec / 1000000ull);
+}
+
+static void conn_cleanup_session(ns_shm_t *shm, conn_t *c) {
+  if (!c || !c->authed) return;
+  // Remove user from all rooms
+  for (uint32_t r = 0; r < NS_MAX_ROOMS; r++) {
+    pthread_mutex_lock(&shm->room_mu[r]);
+    ns_room_set_member(shm, r, c->user_id, false);
+    pthread_mutex_unlock(&shm->room_mu[r]);
+  }
+  // Mark user offline
+  pthread_mutex_lock(&shm->user_mu);
+  if (c->user_id < NS_MAX_USERS) {
+    shm->user_online[c->user_id] = false;
+  }
+  pthread_mutex_unlock(&shm->user_mu);
 }
 
 static void conn_free(conn_t *c) {
@@ -132,10 +149,33 @@ static uint64_t rd_u64(const uint8_t *p, size_t n, size_t off, bool *ok) {
   return ns_be64(p + off);
 }
 
+static size_t count_active_connections(conn_t **fdmap, size_t fdcap) {
+  size_t count = 0;
+  for (size_t i = 0; i < fdcap; i++) {
+    if (fdmap[i] != NULL) count++;
+  }
+  return count;
+}
+
 static void handle_request(ns_shm_t *shm, int notify_wfd, conn_t *c,
+                           conn_t **fdmap, size_t fdcap,
+                           const server_cfg_t *cfg,
                            const ns_header_t *hdr, const uint8_t *body, uint32_t body_len) {
   const uint16_t opcode = ns_be16(&hdr->opcode);
   const uint64_t req_id = ns_be64(&hdr->req_id);
+
+  // Update last_seen for heartbeat timeout detection
+  c->last_seen_ms = now_ms();
+
+  // Check server busy condition (connection limit per worker)
+  if (cfg->max_connections_per_worker > 0) {
+    size_t active_conns = count_active_connections(fdmap, fdcap);
+    if (active_conns >= (size_t)cfg->max_connections_per_worker) {
+      metric_inc_u64(&shm->total_errors, 1);
+      send_simple_response(c, opcode, ST_ERR_SERVER_BUSY, req_id, NULL, 0);
+      return;
+    }
+  }
 
   metric_inc_u64(&shm->total_requests, 1);
   if (opcode < (uint16_t)(sizeof(shm->op_counts) / sizeof(shm->op_counts[0]))) {
@@ -340,7 +380,8 @@ static void handle_request(ns_shm_t *shm, int notify_wfd, conn_t *c,
   }
 }
 
-static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_wfd, conn_t *c, const server_cfg_t *cfg) {
+static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_wfd, conn_t *c,
+                          conn_t **fdmap, size_t fdcap, const server_cfg_t *cfg) {
   // Read
   while (true) {
     ssize_t n = recv(c->fd, c->rbuf + c->rlen, sizeof(c->rbuf) - c->rlen, 0);
@@ -375,7 +416,7 @@ static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_wfd, conn_t *c, co
       return -1;
     }
 
-    handle_request(shm, notify_wfd, c, &hdr, body, body_len);
+    handle_request(shm, notify_wfd, c, fdmap, fdcap, cfg, &hdr, body, body_len);
 
     off += frame_len;
   }
@@ -446,6 +487,9 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
 
   uint64_t last_chat_seq = ns_chat_latest_seq(shm);
   struct epoll_event events[256];
+  uint64_t last_timeout_check_ms = now_ms();
+  const uint64_t HEARTBEAT_TIMEOUT_MS = 30000u; // 30 seconds
+  const uint64_t TIMEOUT_CHECK_INTERVAL_MS = 5000u; // Check every 5 seconds
 
   LOG_INFO("Worker started (pid=%d)", (int)getpid());
 
@@ -454,6 +498,25 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
     if (n < 0) {
       if (errno == EINTR) continue;
       break;
+    }
+
+    uint64_t now = now_ms();
+
+    // Periodic heartbeat timeout check
+    if (now - last_timeout_check_ms >= TIMEOUT_CHECK_INTERVAL_MS) {
+      last_timeout_check_ms = now;
+      for (size_t fd = 0; fd < fdcap; fd++) {
+        conn_t *c = fdmap[fd];
+        if (!c || !c->authed) continue;
+        if (now - c->last_seen_ms >= HEARTBEAT_TIMEOUT_MS) {
+          LOG_WARN("Connection timeout: fd=%zu user_id=%u last_seen=%llu ms ago",
+                   fd, c->user_id, (unsigned long long)(now - c->last_seen_ms));
+          conn_cleanup_session(shm, c);
+          epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, NULL);
+          fdmap[fd] = NULL;
+          conn_free(c);
+        }
+      }
     }
 
     // periodic broadcast drain (in case notifications are coalesced)
@@ -470,8 +533,21 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
             if (errno == EAGAIN || errno == EWOULDBLOCK) break;
             break;
           }
+          // Check connection limit per worker
+          size_t active_conns = count_active_connections(fdmap, fdcap);
+          if (cfg->max_connections_per_worker > 0 &&
+              active_conns >= (size_t)cfg->max_connections_per_worker) {
+            LOG_WARN("Connection limit reached: %zu >= %u, rejecting", active_conns, cfg->max_connections_per_worker);
+            close(cfd);
+            continue;
+          }
+
           (void)net_set_nonblocking(cfd, true);
           (void)net_set_tcp_nodelay(cfd);
+          // Set socket timeouts
+          if (cfg->recv_timeout_ms > 0 || cfg->send_timeout_ms > 0) {
+            (void)net_set_timeouts_ms(cfd, cfg->recv_timeout_ms, cfg->send_timeout_ms);
+          }
           metric_inc_u64(&shm->total_connections, 1);
 
           if ((size_t)cfd >= fdcap) {
@@ -483,6 +559,7 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
           c->fd = cfd;
           c->wcap = 0;
           c->wbuf = NULL;
+          c->last_seen_ms = now_ms(); // Initialize last_seen
           fdmap[cfd] = c;
 
           (void)ep_add(epfd, cfd, EPOLLIN | EPOLLRDHUP, c);
@@ -504,12 +581,14 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
       if (fd < 0 || (size_t)fd >= fdcap || fdmap[fd] != c) continue;
 
       if ((events[i].events & (EPOLLHUP | EPOLLERR | EPOLLRDHUP)) != 0u) {
+        conn_cleanup_session(shm, c);
         fdmap[fd] = NULL;
         conn_free(c);
         continue;
       }
 
-      if (handle_conn_io(epfd, shm, notify_wfd, c, cfg) != 0) {
+      if (handle_conn_io(epfd, shm, notify_wfd, c, fdmap, fdcap, cfg) != 0) {
+        conn_cleanup_session(shm, c);
         fdmap[fd] = NULL;
         conn_free(c);
         continue;

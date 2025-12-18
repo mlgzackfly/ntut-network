@@ -92,4 +92,10 @@ uint64_t ns_chat_read_from(ns_shm_t *s, uint64_t *inout_seq, ns_chat_event_t *ou
 
 void ns_txn_append(ns_shm_t *s, uint16_t opcode, uint16_t status, uint32_t from_uid, uint32_t to_uid, int64_t amount);
 
+// Asset conservation invariant check
+// Returns 0 if invariant holds, -1 if violated
+// Computes: sum(balances) == initial_total + sum(deposits) - sum(withdrawals)
+int ns_check_asset_conservation(const ns_shm_t *s, int64_t *out_current_total, int64_t *out_expected_total);
+
+
 

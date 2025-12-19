@@ -637,17 +637,23 @@ int main(int argc, char **argv) {
   // Set socket to non-blocking to prevent deadlock between reader_thread and send_and_wait
   (void)net_set_nonblocking(g_fd, true);
 
-  printf("Logging in as: %s\n", username);
-  if (do_login(g_fd, username) != 0) {
-    printf("Login failed\n");
-    close(g_fd);
-    return 1;
-  }
-
-  // Start reader thread (reads all frames and routes broadcasts/responses)
+  // Start reader thread FIRST (before login) so it can handle responses
   pthread_t reader_th;
   if (pthread_create(&reader_th, NULL, reader_thread, NULL) != 0) {
     printf("Failed to create reader thread\n");
+    close(g_fd);
+    return 1;
+  }
+  
+  // Give reader thread a moment to start
+  usleep(100000); // 100ms
+
+  printf("Logging in as: %s\n", username);
+  if (do_login(g_fd, username) != 0) {
+    printf("Login failed\n");
+    g_running = false;
+    pthread_cond_broadcast(&g_response_queue.cond);
+    pthread_join(reader_th, NULL);
     close(g_fd);
     return 1;
   }

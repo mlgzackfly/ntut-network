@@ -24,6 +24,29 @@ static uint16_t g_room_id = UINT16_MAX; // Use UINT16_MAX to indicate "not in ro
 static uint64_t g_req_id = 0;
 static pthread_mutex_t g_socket_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Response queue for storing responses by req_id
+typedef struct response_entry {
+  uint64_t req_id;
+  ns_header_t hdr;
+  uint8_t *body;
+  uint32_t body_len;
+  struct response_entry *next;
+} response_entry_t;
+
+typedef struct {
+  response_entry_t *head;
+  response_entry_t *tail;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+} response_queue_t;
+
+static response_queue_t g_response_queue = {
+  .head = NULL,
+  .tail = NULL,
+  .mutex = PTHREAD_MUTEX_INITIALIZER,
+  .cond = PTHREAD_COND_INITIALIZER
+};
+
 static int write_full(int fd, const uint8_t *buf, size_t len) {
   size_t off = 0;
   while (off < len) {
@@ -96,67 +119,112 @@ static int send_frame(int fd, uint16_t opcode, uint64_t req_id, const uint8_t *b
   return 0;
 }
 
+// Queue operations for response frames
+static void response_queue_enqueue(uint64_t req_id, const ns_header_t *hdr, const uint8_t *body, uint32_t body_len) {
+  response_entry_t *entry = (response_entry_t *)malloc(sizeof(response_entry_t));
+  if (!entry) return;
+  
+  entry->req_id = req_id;
+  entry->hdr = *hdr;
+  entry->body_len = body_len;
+  if (body_len > 0) {
+    entry->body = (uint8_t *)malloc(body_len);
+    if (entry->body) {
+      memcpy(entry->body, body, body_len);
+    } else {
+      free(entry);
+      return;
+    }
+  } else {
+    entry->body = NULL;
+  }
+  entry->next = NULL;
+  
+  pthread_mutex_lock(&g_response_queue.mutex);
+  if (g_response_queue.tail) {
+    g_response_queue.tail->next = entry;
+    g_response_queue.tail = entry;
+  } else {
+    g_response_queue.head = g_response_queue.tail = entry;
+  }
+  pthread_cond_broadcast(&g_response_queue.cond);
+  pthread_mutex_unlock(&g_response_queue.mutex);
+}
+
+static response_entry_t *response_queue_dequeue(uint64_t req_id, int timeout_ms) {
+  struct timespec ts;
+  if (timeout_ms > 0) {
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_sec += timeout_ms / 1000;
+    ts.tv_nsec += (timeout_ms % 1000) * 1000000L;
+    if (ts.tv_nsec >= 1000000000L) {
+      ts.tv_sec++;
+      ts.tv_nsec -= 1000000000L;
+    }
+  }
+  
+  pthread_mutex_lock(&g_response_queue.mutex);
+  
+  while (g_running) {
+    // Search for matching req_id
+    response_entry_t *prev = NULL;
+    response_entry_t *curr = g_response_queue.head;
+    
+    while (curr) {
+      if (curr->req_id == req_id) {
+        // Found matching entry, remove it
+        if (prev) {
+          prev->next = curr->next;
+        } else {
+          g_response_queue.head = curr->next;
+        }
+        if (curr == g_response_queue.tail) {
+          g_response_queue.tail = prev;
+        }
+        pthread_mutex_unlock(&g_response_queue.mutex);
+        return curr;
+      }
+      prev = curr;
+      curr = curr->next;
+    }
+    
+    // Not found, wait for new entries
+    if (timeout_ms > 0) {
+      int ret = pthread_cond_timedwait(&g_response_queue.cond, &g_response_queue.mutex, &ts);
+      if (ret == ETIMEDOUT) {
+        pthread_mutex_unlock(&g_response_queue.mutex);
+        return NULL;
+      }
+    } else {
+      pthread_cond_wait(&g_response_queue.cond, &g_response_queue.mutex);
+    }
+  }
+  
+  pthread_mutex_unlock(&g_response_queue.mutex);
+  return NULL;
+}
+
+static void response_entry_free(response_entry_t *entry) {
+  if (!entry) return;
+  free(entry->body);
+  free(entry);
+}
+
 static int send_and_wait(int fd, uint16_t opcode, uint64_t req_id, const uint8_t *body, uint32_t body_len,
                          ns_header_t *out_hdr, uint8_t **out_body, uint32_t *out_body_len) {
   if (send_frame(fd, opcode, req_id, body, body_len) != 0) return -1;
 
-  // Try up to 10 times to get the right response (with timeout handling)
-  for (int attempts = 0; attempts < 10; attempts++) {
-    ns_header_t rh;
-    uint8_t *rb = NULL;
-    uint32_t rbl = 0;
-    
-    // Use select with timeout
-    fd_set rfds;
-    struct timeval tv;
-    FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
-    
-    int sel_ret = select(fd + 1, &rfds, NULL, NULL, &tv);
-    if (sel_ret <= 0) {
-      // Timeout or error
-      continue;
-    }
-    
-    if (read_frame(fd, &rh, &rb, &rbl) != 0) {
-      // In non-blocking mode, EAGAIN shouldn't happen after select, but handle it anyway
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        continue; // No data available, retry
-      }
-      return -1; // Real error
-    }
-
-    if (!ns_validate_header_basic(&rh, 65536) || !ns_validate_checksum(&rh, rb, rbl)) {
-      free(rb);
-      continue;
-    }
-
-    uint16_t rop = ns_be16(&rh.opcode);
-    uint64_t rrid = ns_be64(&rh.req_id);
-    
-    // Skip chat broadcasts - receive_thread handles them
-    // Broadcasts have req_id == 0 and are server pushes
-    if (rop == OP_CHAT_BROADCAST && rrid == 0) {
-      free(rb);
-      continue;
-    }
-    
-    // Check if this is the response we're waiting for
-    if (rrid == req_id) {
-      *out_hdr = rh;
-      *out_body = rb;
-      *out_body_len = rbl;
-      return 0;
-    }
-    
-    // Wrong req_id - this shouldn't happen, but free and continue
-    free(rb);
+  // Wait for response from queue (timeout: 5 seconds)
+  response_entry_t *entry = response_queue_dequeue(req_id, 5000);
+  if (!entry) {
+    return -1; // Timeout or error
   }
   
-  // Timeout - didn't get response
-  return -1;
+  *out_hdr = entry->hdr;
+  *out_body = entry->body;
+  *out_body_len = entry->body_len;
+  free(entry);
+  return 0;
 }
 
 static int do_login(int fd, const char *username) {
@@ -240,18 +308,18 @@ static void *heartbeat_thread(void *arg) {
   return NULL;
 }
 
-static void *receive_thread(void *arg) {
+// Reader thread: reads all frames from socket and routes them appropriately
+// - Broadcasts (req_id == 0): immediately display chat messages
+// - Responses (req_id != 0): enqueue for send_and_wait to pick up
+static void *reader_thread(void *arg) {
   (void)arg;
-  // Simplified: receive_thread only handles chat broadcasts
-  // All other responses are handled by send_and_wait
-  // We use a very short timeout to avoid blocking send_and_wait
   while (g_running && g_fd >= 0) {
     fd_set rfds;
     struct timeval tv;
     FD_ZERO(&rfds);
     FD_SET(g_fd, &rfds);
     tv.tv_sec = 0;
-    tv.tv_usec = 50000; // 50ms - very short to not interfere with send_and_wait
+    tv.tv_usec = 100000; // 100ms timeout
     
     int ret = select(g_fd + 1, &rfds, NULL, NULL, &tv);
     if (ret <= 0) continue;
@@ -262,11 +330,11 @@ static void *receive_thread(void *arg) {
     uint32_t body_len = 0;
     
     if (read_frame(g_fd, &hdr, &body, &body_len) != 0) {
-      // In non-blocking mode, EAGAIN means no data available yet (shouldn't happen after select)
-      // Other errors mean connection closed or error
+      // In non-blocking mode, EAGAIN means no data available yet
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        continue; // No data available, continue loop
+        continue;
       }
+      // Connection closed or error
       if (g_running) printf("\n[Connection closed]\n");
       break;
     }
@@ -279,19 +347,18 @@ static void *receive_thread(void *arg) {
     uint16_t opcode = ns_be16(&hdr.opcode);
     uint64_t req_id = ns_be64(&hdr.req_id);
     
-    // Only handle CHAT_BROADCAST (req_id == 0 indicates server push)
-    // Server format: u16 room_id + u32 from_user_id + u16 msg_len + msg
     if (opcode == OP_CHAT_BROADCAST && req_id == 0) {
+      // Broadcast message: display immediately
+      // Server format: u16 room_id + u32 from_user_id + u16 msg_len + msg
       if (body_len >= 8) {
-        uint16_t room = ns_be16(body + 0);  // room_id at offset 0
-        uint32_t from_uid = ns_be32(body + 2);  // from_user_id at offset 2
-        uint16_t msg_len = ns_be16(body + 6);  // msg_len at offset 6
+        uint16_t room = ns_be16(body + 0);
+        uint32_t from_uid = ns_be32(body + 2);
+        uint16_t msg_len = ns_be16(body + 6);
         if (msg_len > 0 && msg_len <= body_len - 8) {
           char msg[257];
           size_t copy_len = (size_t)msg_len < 256 ? msg_len : 256;
           memcpy(msg, body + 8, copy_len);
           msg[copy_len] = '\0';
-          // Show all messages (including our own from server broadcast)
           if (from_uid == g_user_id) {
             printf("\n[Room %u] You: %s\n> ", room, msg);
           } else {
@@ -301,11 +368,12 @@ static void *receive_thread(void *arg) {
         }
       }
       free(body);
+    } else if (req_id != 0) {
+      // Response to a request: enqueue for send_and_wait
+      response_queue_enqueue(req_id, &hdr, body, body_len);
+      // Note: body ownership transferred to queue, don't free here
     } else {
-      // Not a broadcast - this is a response to a request
-      // We can't "unread" it, so we need to buffer it somehow
-      // For now, we'll just free it and let send_and_wait retry
-      // This is not ideal, but send_and_wait has retry logic
+      // Unexpected: req_id == 0 but not a broadcast
       free(body);
     }
   }
@@ -566,7 +634,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   (void)net_set_tcp_nodelay(g_fd);
-  // Set socket to non-blocking to prevent deadlock between receive_thread and send_and_wait
+  // Set socket to non-blocking to prevent deadlock between reader_thread and send_and_wait
   (void)net_set_nonblocking(g_fd, true);
 
   printf("Logging in as: %s\n", username);
@@ -576,10 +644,10 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  // Start receive thread (for chat broadcasts)
-  pthread_t recv_th;
-  if (pthread_create(&recv_th, NULL, receive_thread, NULL) != 0) {
-    printf("Failed to create receive thread\n");
+  // Start reader thread (reads all frames and routes broadcasts/responses)
+  pthread_t reader_th;
+  if (pthread_create(&reader_th, NULL, reader_thread, NULL) != 0) {
+    printf("Failed to create reader thread\n");
     close(g_fd);
     return 1;
   }
@@ -589,7 +657,7 @@ int main(int argc, char **argv) {
   if (pthread_create(&hb_th, NULL, heartbeat_thread, NULL) != 0) {
     printf("Failed to create heartbeat thread\n");
     g_running = false;
-    pthread_join(recv_th, NULL);
+    pthread_join(reader_th, NULL);
     close(g_fd);
     return 1;
   }
@@ -614,8 +682,22 @@ int main(int argc, char **argv) {
   }
 
   g_running = false;
+  // Signal queue waiters to wake up
+  pthread_cond_broadcast(&g_response_queue.cond);
   pthread_join(hb_th, NULL);
-  pthread_join(recv_th, NULL);
+  pthread_join(reader_th, NULL);
+  
+  // Clean up response queue
+  pthread_mutex_lock(&g_response_queue.mutex);
+  response_entry_t *entry = g_response_queue.head;
+  while (entry) {
+    response_entry_t *next = entry->next;
+    response_entry_free(entry);
+    entry = next;
+  }
+  g_response_queue.head = g_response_queue.tail = NULL;
+  pthread_mutex_unlock(&g_response_queue.mutex);
+  
   close(g_fd);
   printf("\nGoodbye!\n");
   return 0;

@@ -30,6 +30,7 @@ typedef struct {
   int conns;
   int duration_s;
   mix_t mix;
+  int payload_size; // For CHAT_SEND payload size (bytes)
 
   stats_t stats;
 } thread_ctx_t;
@@ -270,12 +271,19 @@ static void *thread_main(void *arg) {
       }
 
       if (opcode == OP_CHAT_SEND) {
-        const char *msg = "hello";
-        uint16_t mlen = (uint16_t)strlen(msg);
+        // Generate message with specified payload size
+        // Body: u16 room_id + u16 msg_len + msg_bytes
+        // Total body = 4 + msg_len, so msg_len = payload_size - 4 (min 1)
+        uint16_t target_msg_len = (ctx->payload_size > 4) ? (uint16_t)(ctx->payload_size - 4) : 1;
+        if (target_msg_len > 512) target_msg_len = 512; // Limit to buffer size
+        
         ns_put_be16(body + 0, (uint16_t)ctx->room_id);
-        ns_put_be16(body + 2, mlen);
-        memcpy(body + 4, msg, mlen);
-        body_len = 4u + mlen;
+        ns_put_be16(body + 2, target_msg_len);
+        // Fill message with pattern (repeating "x" or random data)
+        for (uint16_t i = 0; i < target_msg_len; i++) {
+          body[4 + i] = (uint8_t)('a' + (i % 26));
+        }
+        body_len = 4u + target_msg_len;
       } else if (opcode == OP_DEPOSIT || opcode == OP_WITHDRAW) {
         uint64_t amt = (xorshift64(&rng) % 100u) + 1u;
         ns_put_be64(body + 0, amt);
@@ -341,7 +349,7 @@ static void *thread_main(void *arg) {
 
 static void usage(const char *p) {
   fprintf(stderr,
-          "Usage: %s --host 127.0.0.1 --port 9000 --connections 100 --threads 16 --duration 60 --mix mixed --out results.csv\n",
+          "Usage: %s --host 127.0.0.1 --port 9000 --connections 100 --threads 16 --duration 60 --mix mixed --payload-size 32 --out results.csv\n",
           p);
 }
 
@@ -362,6 +370,7 @@ int main(int argc, char **argv) {
   int duration_s = 30;
   const char *mix_s = "mixed";
   const char *out_path = "results.csv";
+  int payload_size = 32; // Default payload size for CHAT_SEND (bytes)
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--host") == 0 && i + 1 < argc) host = argv[++i];
@@ -370,6 +379,7 @@ int main(int argc, char **argv) {
     else if (strcmp(argv[i], "--threads") == 0 && i + 1 < argc) threads = atoi(argv[++i]);
     else if (strcmp(argv[i], "--duration") == 0 && i + 1 < argc) duration_s = atoi(argv[++i]);
     else if (strcmp(argv[i], "--mix") == 0 && i + 1 < argc) mix_s = argv[++i];
+    else if (strcmp(argv[i], "--payload-size") == 0 && i + 1 < argc) payload_size = atoi(argv[++i]);
     else if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) out_path = argv[++i];
     else if (strcmp(argv[i], "--help") == 0) { usage(argv[0]); return 0; }
     else { usage(argv[0]); return 2; }
@@ -394,6 +404,7 @@ int main(int argc, char **argv) {
     ctxs[t].conns = base + (t < rem ? 1 : 0);
     ctxs[t].duration_s = duration_s;
     ctxs[t].mix = mix;
+    ctxs[t].payload_size = payload_size;
     (void)pthread_create(&ths[t], NULL, thread_main, &ctxs[t]);
   }
 

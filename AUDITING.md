@@ -346,3 +346,4 @@ pthread_mutex_lock(&txn_mu[lock_idx]);
 4. **性能**: 鎖粒度優化、metrics 收集、性能分析
 
 這些機制確保了系統的正確性、可靠性和可觀測性。
+

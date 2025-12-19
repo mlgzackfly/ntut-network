@@ -85,6 +85,7 @@ run_client() {
   local connections="$1"
   local mix="$2"
   local out_csv="$3"
+  local payload_size="${4:-32}"  # Default 32 bytes if not specified
   "$CLIENT_BIN" \
     --host "$HOST" \
     --port "$PORT" \
@@ -92,6 +93,7 @@ run_client() {
     --threads "$THREADS" \
     --duration "$DURATION" \
     --mix "$mix" \
+    --payload-size "$payload_size" \
     --out "$out_csv"
 }
 
@@ -125,8 +127,6 @@ for workers in 1 2 4 8; do
 done
 
 # Payload size sweep (32B → 256B → 1KB)
-# Note: This requires client support for payload size parameter
-# For now, we'll test with fixed workers=4 and connections=100
 echo "[3b/4] Payload size sweep..."
 start_server 4
 
@@ -135,9 +135,7 @@ for payload_size in 32 256 1024; do
   tmp="${OUT_DIR}/tmp-${run_id}.csv"
   scenario="w4_c100_mixed_p${payload_size}"
   echo "Run ${run_id}: ${scenario} (payload=${payload_size}B)"
-  # Note: Current client doesn't support --payload-size, so this is a placeholder
-  # In a full implementation, you would add: --payload-size "$payload_size"
-  run_client 100 mixed "$tmp"
+  run_client 100 mixed "$tmp" "$payload_size"
   append_run "$run_id" "$scenario" "$tmp"
 done
 
@@ -148,6 +146,7 @@ echo "- Results: ${RUNS_CSV}"
 echo "- Server log: ${SERVER_LOG}"
 echo "Next: gnuplot -c scripts/plot_latency.gp ${RUNS_CSV} ${OUT_DIR}/latency.png"
 echo "      gnuplot -c scripts/plot_throughput.gp ${RUNS_CSV} ${OUT_DIR}/throughput.png"
+
 
 
 

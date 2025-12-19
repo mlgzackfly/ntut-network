@@ -1,3 +1,7 @@
-
-
-
+# Placeholder for screenshots
+# This file ensures the screenshots directory is tracked by git
+# Replace this with actual screenshots:
+# - server_start.png
+# - client_stress.png
+# - metrics.png
+# - graceful_shutdown.png

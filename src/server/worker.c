@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "worker.h"
 
 #include "log.h"
@@ -509,7 +510,7 @@ int worker_run2(int worker_id, int listen_fd, int notify_rfd, int notify_wfd, ns
         conn_t *c = fdmap[fd];
         if (!c || !c->authed) continue;
         if (now - c->last_seen_ms >= HEARTBEAT_TIMEOUT_MS) {
-          LOG_WARN("Connection timeout: fd=%zu user_id=%u last_seen=%llu ms ago",
+          LOG_INFO("Connection timeout: fd=%zu user_id=%u last_seen=%llu ms ago",
                    fd, c->user_id, (unsigned long long)(now - c->last_seen_ms));
           conn_cleanup_session(shm, c);
           epoll_ctl(epfd, EPOLL_CTL_DEL, c->fd, NULL);

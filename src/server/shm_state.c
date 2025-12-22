@@ -1,6 +1,8 @@
-#include "shm_state.h"
+#define _POSIX_C_SOURCE 200809L
 
+#include "shm_state.h"
 #include "log.h"
+#include "proto.h"
 
 #include <errno.h>
 #include <fcntl.h>

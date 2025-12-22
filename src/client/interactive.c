@@ -67,14 +67,12 @@ static int read_full(int fd, uint8_t *buf, size_t len) {
     } else if (n == 0) {
       return -1; // EOF
     } else {
-      // Handle non-blocking socket: EAGAIN/EWOULDBLOCK means no data available yet
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        return -1; // Would block - caller should use select/poll first
-      } else if (errno == EINTR) {
-        continue; // Interrupted, retry
-      } else {
-        return -1; // Error
+      // Treat EAGAIN/EWOULDBLOCK like EINTR here because caller already
+      // guards with select(), so "would block" just means try again.
+      if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+        continue; // Retry
       }
+      return -1; // Other errors
     }
   }
   return 0;

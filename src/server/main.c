@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "log.h"
 #include "net.h"
 #include "shm_state.h"
@@ -9,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -20,6 +23,14 @@ static volatile sig_atomic_t g_stop = 0;
 static void on_sig(int sig) {
   (void)sig;
   g_stop = 1;
+}
+
+static void sleep_ms(int ms) {
+  if (ms <= 0) return;
+  struct timespec ts;
+  ts.tv_sec = ms / 1000;
+  ts.tv_nsec = (long)(ms % 1000) * 1000000L;
+  (void)nanosleep(&ts, NULL);
 }
 
 static void usage(const char *prog) {
@@ -177,7 +188,7 @@ int main(int argc, char **argv) {
         }
       }
     }
-    usleep(200000);
+    sleep_ms(200);
   }
 
   LOG_INFO("Shutting down...");
@@ -197,7 +208,7 @@ int main(int argc, char **argv) {
           waited = 1;
           break;
         }
-        usleep(100000); // 100ms
+        sleep_ms(100); // 100ms
       }
       if (!waited) {
         LOG_WARN("Worker %d (pid=%d) did not exit gracefully, sending SIGKILL", w, (int)pids[w]);

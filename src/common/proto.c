@@ -70,6 +70,15 @@ uint32_t ns_frame_checksum(const ns_header_t *hdr_be, const uint8_t *body, size_
   return ~crc;
 }
 
+void ns_xor_crypt(uint8_t *data, size_t len, uint32_t key) {
+  if (!data || len == 0) return;
+  uint8_t k[4];
+  ns_put_be32(k, key);
+  for (size_t i = 0; i < len; i++) {
+    data[i] ^= k[i % 4];
+  }
+}
+
 void ns_build_header(ns_header_t *out_hdr_be,
                      uint8_t flags,
                      uint16_t opcode,

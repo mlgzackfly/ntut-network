@@ -139,6 +139,8 @@ kill -TERM <master_pid>
   - `mixed`：混合負載（聊天 + 交易）
   - `trade-heavy`：交易為主（80% 交易操作）
   - `chat-heavy`：聊天為主（70% 聊天操作）
+- `--payload-size <N>`：CHAT_SEND 負載大小（位元組，預設 32，用於 payload sweep）
+- `--encrypt`：啟用簡單 XOR 加密 demo（只加密 body，對應 server 端自動解密）
 - `--out <FILE>`：輸出 CSV 檔案路徑（預設：results.csv）
 - `--help`：顯示幫助訊息
 
@@ -164,10 +166,10 @@ kill -TERM <master_pid>
 connections=100 threads=16 duration=30 total=45230 ok=45120 err=110 rps=1507.67 p50=1250us p95=3200us p99=8500us
 ```
 
-**CSV 輸出格式**：
+**CSV 輸出格式**（已加入錯誤細分類）：
 ```csv
-host,port,connections,threads,duration_s,total,ok,err,rps,p50_us,p95_us,p99_us
-127.0.0.1,9000,100,16,30,45230,45120,110,1507.67,1250,3200,8500
+host,port,connections,threads,duration_s,total,ok,err,rps,p50_us,p95_us,p99_us,err_bad_packet,err_checksum_fail,err_unauthorized,err_not_found,err_insufficient_funds,err_server_busy,err_timeout,err_internal
+127.0.0.1,9000,100,16,30,45230,45120,110,1507.67,1250,3200,8500,0,0,0,0,3,100,5,2
 ```
 
 欄位說明：
@@ -183,6 +185,14 @@ host,port,connections,threads,duration_s,total,ok,err,rps,p50_us,p95_us,p99_us
 - `p50_us`：50% 分位數延遲（微秒）
 - `p95_us`：95% 分位數延遲（微秒）
 - `p99_us`：99% 分位數延遲（微秒）
+- `err_bad_packet`：ST_ERR_BAD_PACKET 次數
+- `err_checksum_fail`：ST_ERR_CHECKSUM_FAIL 次數
+- `err_unauthorized`：ST_ERR_UNAUTHORIZED 次數
+- `err_not_found`：ST_ERR_NOT_FOUND 次數
+- `err_insufficient_funds`：ST_ERR_INSUFFICIENT_FUNDS 次數
+- `err_server_busy`：ST_ERR_SERVER_BUSY 次數
+- `err_timeout`：ST_ERR_TIMEOUT 次數
+- `err_internal`：ST_ERR_INTERNAL 次數
 
 ---
 
@@ -389,6 +399,24 @@ if (ns_check_asset_conservation(shm, &current, &expected) != 0) {
 1. 新增 opcode（在 `include/proto.h` 中定義）
 2. 在 `src/server/worker.c` 的 `handle_request()` 中處理新 opcode
 3. 更新客戶端以支援新操作
+
+### Metrics 檢視工具
+
+專案提供 `bin/metrics` 小工具，可直接讀取 shared memory 中的指標：
+
+```bash
+# 使用預設 shm 名稱 (/ns_trading_chat)
+./bin/metrics
+
+# 或指定其他 shm 名稱
+./bin/metrics /ns_trading_chat_alt
+```
+
+輸出包含：
+- `total_connections`
+- `total_requests`
+- `total_errors`
+- 每個 opcode 的 `op_counts`
 
 ---
 

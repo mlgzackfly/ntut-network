@@ -8,6 +8,14 @@ void stats_init(stats_t *s) {
   s->cap = 0;
   s->ok = 0;
   s->err = 0;
+  s->err_bad_packet = 0;
+  s->err_checksum_fail = 0;
+  s->err_unauthorized = 0;
+  s->err_not_found = 0;
+  s->err_insufficient_funds = 0;
+  s->err_server_busy = 0;
+  s->err_timeout = 0;
+  s->err_internal = 0;
 }
 
 void stats_free(stats_t *s) {

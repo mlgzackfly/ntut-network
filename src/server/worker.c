@@ -409,12 +409,17 @@ static int handle_conn_io(int epfd, ns_shm_t *shm, int notify_wfd, conn_t *c,
     size_t frame_len = sizeof(ns_header_t) + (size_t)body_len;
     if (c->rlen - off < frame_len) break;
 
-    const uint8_t *body = (body_len ? (c->rbuf + off + sizeof(ns_header_t)) : NULL);
+    uint8_t *body = (body_len ? (c->rbuf + off + sizeof(ns_header_t)) : NULL);
     if (!ns_validate_checksum(&hdr, body, body_len)) {
       metric_inc_u64(&shm->total_errors, 1);
       // respond with checksum error and close
       send_simple_response(c, ns_be16(&hdr.opcode), ST_ERR_CHECKSUM_FAIL, ns_be64(&hdr.req_id), NULL, 0);
       return -1;
+    }
+
+    // Decrypt payload if encrypted flag is set (demo XOR encryption).
+    if ((hdr.flags & NS_FLAG_ENCRYPTED) != 0u && body && body_len > 0) {
+      ns_xor_crypt(body, body_len, NS_XOR_KEY);
     }
 
     handle_request(shm, notify_wfd, c, fdmap, fdcap, cfg, &hdr, body, body_len);

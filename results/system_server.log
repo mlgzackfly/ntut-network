@@ -1,0 +1,9 @@
+2025-12-22 11:10:20.918 [server] pid=354066 INFO src/server/shm_state.c:100: Initialized shared memory state (nonce=11399207898829206755)
+2025-12-22 11:10:20.918 [server] pid=354066 WARN src/common/net.c:68: SO_REUSEPORT failed: Operation not supported
+2025-12-22 11:10:20.918 [server] pid=354066 INFO src/server/main.c:122: Server starting: port=9000 workers=2 shm=/ns_trading_chat_test
+2025-12-22 11:10:20.919 [server-w0] pid=354068 INFO src/server/worker.c:500: Worker started (pid=354068)
+2025-12-22 11:10:20.919 [server-w1] pid=354069 INFO src/server/worker.c:500: Worker started (pid=354069)
+2025-12-22 11:10:31.996 [server] pid=354066 INFO src/server/main.c:183: Shutting down...
+2025-12-22 11:10:37.007 [server] pid=354066 WARN src/server/main.c:203: Worker 0 (pid=354068) did not exit gracefully, sending SIGKILL
+2025-12-22 11:10:42.018 [server] pid=354066 WARN src/server/main.c:203: Worker 1 (pid=354069) did not exit gracefully, sending SIGKILL
+2025-12-22 11:10:42.019 [server] pid=354066 INFO src/server/main.c:219: Shutdown complete.

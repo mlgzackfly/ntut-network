@@ -10,6 +10,16 @@ typedef struct {
 
   uint64_t ok;
   uint64_t err;
+
+  // Detailed error breakdown by status code (for auditing/analysis)
+  uint64_t err_bad_packet;
+  uint64_t err_checksum_fail;
+  uint64_t err_unauthorized;
+  uint64_t err_not_found;
+  uint64_t err_insufficient_funds;
+  uint64_t err_server_busy;
+  uint64_t err_timeout;
+  uint64_t err_internal;
 } stats_t;
 
 void stats_init(stats_t *s);

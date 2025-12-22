@@ -8,6 +8,9 @@
 #define NS_MAGIC 0x4E53u /* 'N''S' */
 #define NS_VERSION 1u
 
+// Simple demo XOR key for optional payload encryption
+#define NS_XOR_KEY 0xA5A5A5A5u
+
 enum {
   NS_FLAG_ENCRYPTED = 1u << 0,
   NS_FLAG_COMPRESSED = 1u << 1,
@@ -63,6 +66,10 @@ typedef struct __attribute__((packed)) {
 // Helpers
 uint32_t ns_crc32(const void *data, size_t len);
 uint32_t ns_frame_checksum(const ns_header_t *hdr_be, const uint8_t *body, size_t body_len);
+
+// Simple symmetric XOR "encryption" for demo purposes.
+// Uses NS_XOR_KEY as the key; applying it twice recovers the original.
+void ns_xor_crypt(uint8_t *data, size_t len, uint32_t key);
 
 // Encode a header in big-endian into out_hdr (checksum is filled).
 // out_hdr points to a ns_header_t (wire format).

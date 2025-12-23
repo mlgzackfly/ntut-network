@@ -80,6 +80,30 @@ kill -INT $(pgrep -f "bin/server" | head -1)
 ls /dev/shm/ns_trading_chat  # 應該不存在
 ```
 
+## 功能展示截圖 (Features Showcase)
+
+為了豐富 `docs/FEATURES_SHOWCASE.md`，建議產生以下截圖。您可以使用輔助腳本來產生這些畫面：
+
+```bash
+bash scripts/generate_screenshot_content.sh
+```
+
+### 5. `trading_flow.png`
+- **內容**：展示 Login -> Deposit -> Transfer -> Balance 的完整流程。
+- **產生**：執行腳本選 Option 1。
+
+### 6. `trading_error.png`
+- **內容**：展示餘額不足與用戶不存在的錯誤訊息。
+- **產生**：執行腳本選 Option 2。
+
+### 7. `chat_broadcast.png`
+- **內容**：展示多用戶聊天室對話。
+- **產生**：執行腳本選 Option 3。
+
+### 8. `shm_metrics.png`
+- **內容**：展示詳細的系統指標與資產守恆狀態。
+- **產生**：執行腳本選 Option 4。
+
 ## 截圖要求
 
 - **格式**：PNG 或 JPEG
@@ -100,8 +124,12 @@ ls /dev/shm/ns_trading_chat  # 應該不存在
 - [ ] `client_stress.png` - 顯示 ≥100 併發連線
 - [ ] `metrics.png` - 顯示 p50/p95/p99 與 req/s
 - [ ] `graceful_shutdown.png` - 顯示優雅關閉與資源清理
+- [ ] `trading_flow.png` - 交易流程展示
+- [ ] `trading_error.png` - 錯誤處理展示
+- [ ] `chat_broadcast.png` - 聊天功能展示
+- [ ] `shm_metrics.png` - 系統指標展示
 
 ---
 
-**注意**：這些截圖是 A++ 檢查清單的要求項（第 13 項）。請確保在繳交前完成所有截圖。
+**注意**：前 4 張截圖是 A++ 檢查清單的要求項（第 13 項）。後 4 張是用於功能展示的加分項。
 

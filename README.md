@@ -14,6 +14,8 @@ Key OS/architecture focus:
 - **Security / Reliability**: checksum, (optional) authentication, heartbeat, timeout, graceful shutdown
 - **A++ extras**: Real Test + Auditing discussion (fault injection + analysis)
 
+> 🚀 **New!** Check out our [**Features Showcase**](docs/FEATURES_SHOWCASE.md) to see the trading system in action!
+
 ---
 
 ## Quick Start（快速開始）

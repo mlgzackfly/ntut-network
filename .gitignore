@@ -5,8 +5,6 @@ lib/
 *.a
 *.so
 *.dSYM/
-
-
-
-
-
+results/*.log
+results/*.csv
+results/*.txt

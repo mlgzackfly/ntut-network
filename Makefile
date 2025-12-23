@@ -109,9 +109,22 @@ system-test: all
 
 test: unit-test system-test
 
+# Code quality checks
+check-memory:
+	@echo "Running memory leak detection..."
+	@bash scripts/check_memory.sh
+
+check-static:
+	@echo "Running static analysis..."
+	@bash scripts/check_static.sh
+
+check: check-static check-memory
+	@echo "All code quality checks complete"
+
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR) $(LIB_DIR)
 
+.PHONY: check-memory check-static check
 
 
 

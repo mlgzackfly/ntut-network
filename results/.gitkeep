@@ -1,6 +1,0 @@
-# Placeholder for test results
-# This directory will contain:
-# - runs.csv (aggregated test results)
-# - server.log (server logs)
-# - tmp-*.csv (temporary test result files)
-# - latency.png, throughput.png (gnuplot generated plots)

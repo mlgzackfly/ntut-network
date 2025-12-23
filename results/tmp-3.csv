@@ -1,2 +1,0 @@
-host,port,connections,threads,duration_s,total,ok,err,rps,p50_us,p95_us,p99_us,err_bad_packet,err_checksum_fail,err_unauthorized,err_not_found,err_insufficient_funds,err_server_busy,err_timeout,err_internal
-127.0.0.1,9000,100,16,30,105857,105857,0,3528.57,4222,9429,15278,0,0,0,0,0,0,0,0

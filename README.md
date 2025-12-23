@@ -483,7 +483,7 @@ Use this as the final “definition of done” before submission. Every checked 
 
 - [x] **Integrity**: checksum (CRC32/Adler32) is validated; failures are counted and rejected
 - [x] **Authentication**: login handshake exists and is enforced (trading/chat ops rejected before login)
-- [x] (Optional) **Encryption**: payload encryption implemented and documented (flags-driven) - XOR encryption with `--encrypt` flag support
+- [x] (Optional) **Encryption**: payload encryption implemented and documented (flags-driven) — **XOR demo only（教學示範，非生產強加密）**；可用 `--encrypt` 啟用
 
 ### 10) Reliability (choose ≥1; A++ recommends 3)
 

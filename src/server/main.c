@@ -33,6 +33,22 @@ static void sleep_ms(int ms) {
   (void)nanosleep(&ts, NULL);
 }
 
+// Parse integer from env with bounds; return def if unset or invalid.
+static int parse_env_i(const char *name, int def, int min, int max) {
+  const char *v = getenv(name);
+  if (!v || *v == '\0') return def;
+  char *end = NULL;
+  long n = strtol(v, &end, 10);
+  if (end == v || *end != '\0') return def;
+  if (n < min || n > max) return def;
+  return (int)n;
+}
+
+static int log_fatal_errno(const char *msg) {
+  LOG_ERROR("%s: %s", msg, strerror(errno));
+  return 1;
+}
+
 static void usage(const char *prog) {
   fprintf(stderr,
           "Usage: %s [--bind 0.0.0.0] [--port 9000] [--workers 4] [--shm /ns_shm]\n",
@@ -67,6 +83,11 @@ int main(int argc, char **argv) {
   cfg.recv_timeout_ms = 30000; // 30 seconds
   cfg.send_timeout_ms = 30000; // 30 seconds
 
+  // Allow env overrides for quick tuning without recompiling.
+  cfg.max_connections_per_worker = parse_env_i("NS_MAX_CONN_PER_WORKER", cfg.max_connections_per_worker, 1, 100000);
+  cfg.recv_timeout_ms = parse_env_i("NS_RECV_TIMEOUT_MS", cfg.recv_timeout_ms, 100, 3600000);
+  cfg.send_timeout_ms = parse_env_i("NS_SEND_TIMEOUT_MS", cfg.send_timeout_ms, 100, 3600000);
+
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "--bind") == 0 && i + 1 < argc) {
       cfg.bind_ip = argv[++i];
@@ -89,19 +110,17 @@ int main(int argc, char **argv) {
   signal(SIGTERM, on_sig);
 
   ns_shm_handle_t shm_h;
-  if (ns_shm_create_or_open(&shm_h, cfg.shm_name, true) != 0) {
-    LOG_ERROR("shm_open failed: %s", strerror(errno));
-    return 1;
-  }
+  if (ns_shm_create_or_open(&shm_h, cfg.shm_name, true) != 0)
+    return log_fatal_errno("shm_open failed");
   if (ns_shm_init_if_needed(&shm_h) != 0) {
-    LOG_ERROR("shm init failed: %s", strerror(errno));
+    log_fatal_errno("shm init failed");
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;
   }
 
   int listen_fd = net_listen_tcp(cfg.bind_ip, cfg.port, 4096, true);
   if (listen_fd < 0) {
-    LOG_ERROR("listen failed: %s", strerror(errno));
+    log_fatal_errno("listen failed");
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;
   }
@@ -111,7 +130,7 @@ int main(int argc, char **argv) {
 #ifdef __linux__
   int efd = eventfd(0, EFD_NONBLOCK);
   if (efd < 0) {
-    LOG_ERROR("eventfd failed: %s", strerror(errno));
+    log_fatal_errno("eventfd failed");
     close(listen_fd);
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;
@@ -121,7 +140,7 @@ int main(int argc, char **argv) {
 #else
   int pfd[2];
   if (pipe(pfd) != 0) {
-    LOG_ERROR("pipe failed: %s", strerror(errno));
+    log_fatal_errno("pipe failed");
     close(listen_fd);
     ns_shm_close(&shm_h, cfg.shm_name, true);
     return 1;

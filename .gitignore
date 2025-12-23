@@ -5,10 +5,7 @@ lib/
 *.a
 *.so
 *.dSYM/
-results*.csv
-docs/screenshots/*.png
-docs/screenshots/*.jpg
-docs/screenshots/*.jpeg
+
 
 
 

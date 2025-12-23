@@ -44,7 +44,7 @@ static uint64_t now_ms(void) {
 static void conn_cleanup_session(ns_shm_t *shm, conn_t *c) {
   if (!c || !c->authed) return;
   // Remove user from all rooms
-  for (uint32_t r = 0; r < NS_MAX_ROOMS; r++) {
+  for (uint16_t r = 0; r < (uint16_t)NS_MAX_ROOMS; r++) {
     pthread_mutex_lock(&shm->room_mu[r]);
     ns_room_set_member(shm, r, c->user_id, false);
     pthread_mutex_unlock(&shm->room_mu[r]);
@@ -295,7 +295,13 @@ static void handle_request(ns_shm_t *shm, int notify_wfd, conn_t *c,
       ns_chat_append(shm, room, c->user_id, (const char *)(body + 4), mlen);
       // notify all workers
       uint64_t one = 1;
-      (void)write(notify_wfd, &one, sizeof(one));
+      ssize_t wn;
+      do {
+        wn = write(notify_wfd, &one, sizeof(one));
+      } while (wn < 0 && errno == EINTR);
+      if (wn < 0) {
+        LOG_WARN("notify write failed: %s", strerror(errno));
+      }
       send_simple_response(c, OP_CHAT_SEND, ST_OK, req_id, NULL, 0);
       break;
     }

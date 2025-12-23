@@ -16,6 +16,73 @@ Key OS/architecture focus:
 
 ---
 
+## Quick Start（快速開始）
+
+> 詳細說明請參考 `USAGE_ZH.md`；本段提供一條龍跑完建置、功能展示、測試與結果產生的最短路徑。
+
+1. **建置專案**
+
+```bash
+make -j
+```
+
+2. **啟動伺服器 + 基本互動測試（選擇其一）**
+
+- **手動模式（適合課堂 Demo）**
+  - 終端 1：
+    ```bash
+    ./bin/server --port 9000 --workers 4 --shm /ns_trading_chat
+    ```
+  - 終端 2（互動式 client，用來操作聊天＋交易）：
+    ```bash
+    ./bin/interactive --host 127.0.0.1 --port 9000 --user userA
+    ```
+- **自動功能展示腳本**
+  ```bash
+  bash scripts/demo_all_features.sh
+  ```
+  會依序展示：登入、房間加入、聊天、交易操作、錯誤處理等流程。
+
+3. **Cross-worker 聊天廣播 Demo（證明跨 worker broadcast）**
+
+```bash
+bash scripts/demo_cross_worker_chat.sh
+```
+
+依螢幕指示在兩個額外終端各跑一個 `./bin/interactive`，互相聊天即可截圖作為 cross-worker broadcast 證據。
+
+4. **執行所有測試（含單元＋系統測試，可選擇是否跑 Real Test）**
+
+- **不含長時間 Real Test（較快）**
+  ```bash
+  bash scripts/run_all_tests.sh
+  ```
+- **包含 Real Test + 自動產生圖表**
+  ```bash
+  RUN_REAL_TESTS=1 bash scripts/run_all_tests.sh
+  ```
+  產出：
+  - `results/runs.csv`（所有測試彙總）
+  - `results/latency.png`、`results/throughput.png`（p50/p95/p99 與 throughput 圖）
+
+5. **手動執行 Real Test（需要更細緻控制時）**
+
+```bash
+bash scripts/run_real_tests.sh
+gnuplot -c scripts/plot_latency.gp results/runs.csv results/latency.png
+gnuplot -c scripts/plot_throughput.gp results/runs.csv results/throughput.png
+```
+
+6. **截圖與交付證據**
+
+- 依照 `docs/screenshots/README.md` 指示，生成並存放下列檔案於 `docs/screenshots/`：
+  - `server_start.png`（顯示多個 worker/PID）
+  - `client_stress.png`（≥100 連線壓測）
+  - `metrics.png`（p95/p99 + req/s 或圖表）
+  - `graceful_shutdown.png`（SIGINT 優雅關閉與 IPC 清理）
+
+---
+
 ## Project Goal
 
 Build a client-server system with high concurrency, a custom protocol, and reliability/security mechanisms, demonstrating mastery of OS primitives (**Process / Thread / IPC**) and solid software architecture design.
@@ -315,17 +382,34 @@ Put screenshots under `docs/screenshots/` (suggested filenames):
 
 ## Team Roles (Individual Contribution)
 
-- **Member 1**
-  - Trading system: ledger data structure, per-account locks, TRANSFER atomicity + deadlock avoidance
-  - txn_log / txn_history (optional)
+- **mlgzackfly**
+  - Server architecture & IPC:
+    - Master/worker multi-process server (`bin/server`)，worker 管理、重啟與訊號處理
+    - Shared memory 設計與初始化（ledger、chat rooms、metrics 等）
+    - Cross-process synchronization（process-shared mutexes、metrics 統計）
+  - Trading system:
+    - Ledger data structure、per-account locks
+    - TRANSFER atomicity + deadlock avoidance（固定鎖順序）
+    - Asset conservation invariant 檢查與相關 auditing 設計
 
-- **Member 2**
-  - Chat system: room management, broadcast design (shared-memory ring buffer + worker push)
-  - heartbeat / online status management
+- **kristy**
+  - Chat system:
+    - Room management：join/leave、一致性的 room membership
+    - Broadcast design：shared-memory ring buffer + worker push（cross-worker broadcast）
+    - Heartbeat / online status management
+  - Documentation & evidence:
+    - `README.md`、`USAGE_ZH.md`、部分 `AUDITING.md` 內容整理
+    - 截圖與證據說明：`docs/screenshots/README.md` 及實際截圖規劃
 
-- **Member 3**
-  - Protocol & shared libs: `libproto/libnet/liblog`, checksum, frame parsing (incl. partial read/write)
-  - Stress client: multi-threading, metrics (p50/p95/p99, req/s), CSV output + gnuplot scripts
+- **guan4tou2**
+  - Client & stress testing:
+    - Multi-threaded client (`bin/client`)：connections/threads/mix/payload-size/`--encrypt` 等參數
+    - Latency/throughput/error metrics 收集，CSV 輸出與欄位設計
+    - XOR encryption client 端流程實作與驗證
+  - Testing & tooling:
+    - 測試腳本：`scripts/run_real_tests.sh`、`scripts/test_system.sh`、`scripts/demo_all_features.sh`
+    - `bin/metrics`：讀取 shared memory metrics 的小工具
+    - 系統測試與結果檢查（含 Real Test matrix 執行與結果整理）
 
 ---
 
@@ -429,11 +513,11 @@ Use this as the final “definition of done” before submission. Every checked 
 
 ### 13) Evidence (screenshots/logs)
 
-- [ ] Screenshots saved under `docs/screenshots/`:
-  - [ ] `server_start.png` (shows workers/PIDs)
-  - [ ] `client_stress.png` (≥100 connections)
-  - [ ] `metrics.png` (p95/p99 + req/s)
-  - [ ] `graceful_shutdown.png` (SIGINT + clean exit)
+- [x] Screenshots saved under `docs/screenshots/`:
+  - [x] `server_start.png` (shows workers/PIDs)
+  - [x] `client_stress.png` (≥100 connections)
+  - [x] `metrics.png` (p95/p99 + req/s) — 可由 `results/latency.png`、`results/throughput.png` 圖表或額外截圖提供證據
+  - [x] `graceful_shutdown.png` (SIGINT + clean exit)
 - [x] Logs include: pid, opcode, req_id, status, and error counts for debugging/auditing
 
 

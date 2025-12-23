@@ -342,90 +342,90 @@ Use this as the final “definition of done” before submission. Every checked 
 
 ### 1) Repo & collaboration (must)
 
-- [ ] **GitHub**: repository is pushed to GitHub and accessible to the instructor/TA
-- [ ] **Branch**: default branch is `main`
-- [ ] **Conventional commits (English)**: commit messages follow Conventional Commits (e.g., `feat: ...`, `fix: ...`, `docs: ...`)
-- [ ] **Roles**: the “Team Roles” section is accurate and each member owns at least one real module (not just a bullet point)
-- [ ] **Reproducibility**: a fresh machine can build and run using only README instructions (no hidden steps)
+- [x] **GitHub**: repository is pushed to GitHub and accessible to the instructor/TA
+- [x] **Branch**: default branch is `main`
+- [x] **Conventional commits (English)**: commit messages follow Conventional Commits (e.g., `feat: ...`, `fix: ...`, `docs: ...`)
+- [x] **Roles**: the “Team Roles” section is accurate and each member owns at least one real module (not just a bullet point)
+- [x] **Reproducibility**: a fresh machine can build and run using only README instructions (no hidden steps)
 
 ### 2) Build system (hard requirement)
 
-- [ ] **Build file exists**: `Makefile` (or `CMakeLists.txt`) is present at repo root
-- [ ] **One-command build**: `make` (or `cmake --build ...`) produces both `server` and `client`
-- [ ] **Clean build**: `make clean && make` works repeatedly
-- [ ] **No forbidden dependencies**: no HTTP/WebSocket libraries for application protocol (explicitly documented)
+- [x] **Build file exists**: `Makefile` (or `CMakeLists.txt`) is present at repo root
+- [x] **One-command build**: `make` (or `cmake --build ...`) produces both `server` and `client`
+- [x] **Clean build**: `make clean && make` works repeatedly
+- [x] **No forbidden dependencies**: no HTTP/WebSocket libraries for application protocol (explicitly documented)
 
 ### 3) Libraries / modularity (.a/.so shared by client & server)
 
-- [ ] **Shared libs implemented** (at least 2–3): `libproto`, `libnet`, `liblog`
-- [ ] **Artifacts exist**: build produces `.a` and/or `.so` files (e.g., `libproto.a`)
-- [ ] **Actually used**: both `server` and `client` link against the shared libraries (not duplicated code)
-- [ ] **API boundary**: protocol encode/decode + checksum are inside `libproto` (not scattered)
+- [x] **Shared libs implemented** (at least 2–3): `libproto`, `libnet`, `liblog`
+- [x] **Artifacts exist**: build produces `.a` and/or `.so` files (e.g., `libproto.a`)
+- [x] **Actually used**: both `server` and `client` link against the shared libraries (not duplicated code)
+- [x] **API boundary**: protocol encode/decode + checksum are inside `libproto` (not scattered)
 
 ### 4) Custom application-layer protocol (hard requirement)
 
-- [ ] **Not HTTP/WebSocket**: traffic is your own binary frame format
-- [ ] **Header/body spec**: header fields, sizes, endianness, and body formats are written in README/spec
-- [ ] **Frame correctness**: handles partial read/write (frame reassembly) and invalid frames safely
-- [ ] **Error handling**: server returns meaningful `status` codes (e.g., `ERR_BAD_PACKET`, `ERR_UNAUTHORIZED`)
+- [x] **Not HTTP/WebSocket**: traffic is your own binary frame format
+- [x] **Header/body spec**: header fields, sizes, endianness, and body formats are written in README/spec
+- [x] **Frame correctness**: handles partial read/write (frame reassembly) and invalid frames safely
+- [x] **Error handling**: server returns meaningful `status` codes (e.g., `ERR_BAD_PACKET`, `ERR_UNAUTHORIZED`)
 
 ### 5) Server: multi-process + IPC (hard requirement)
 
-- [ ] **Multi-process**: server runs with multiple worker processes (proof: logs show multiple PIDs)
-- [ ] **Shared memory IPC**: uses `shm_open + mmap` (or SysV shm) for shared state
-- [ ] **Cross-process synchronization**: uses POSIX semaphores or process-shared mutexes correctly
-- [ ] **Metrics in shared state**: total requests, per-opcode counts, error counts are tracked across workers
+- [x] **Multi-process**: server runs with multiple worker processes (proof: logs show multiple PIDs)
+- [x] **Shared memory IPC**: uses `shm_open + mmap` (or SysV shm) for shared state
+- [x] **Cross-process synchronization**: uses POSIX semaphores or process-shared mutexes correctly
+- [x] **Metrics in shared state**: total requests, per-opcode counts, error counts are tracked across workers
 
 ### 6) Trading consistency (ACID-style expectations)
 
-- [ ] **Per-account locking**: balances are protected by per-account locks (not a single global lock)
-- [ ] **Deadlock avoidance**: TRANSFER locks accounts in fixed order (min→max)
-- [ ] **Insufficient funds**: WITHDRAW/TRANSFER rejects correctly and never produces negative balance (if that’s your rule)
-- [ ] **Invariant check (auditing)**: asset conservation check is implemented and demonstrated in results/logs
+- [x] **Per-account locking**: balances are protected by per-account locks (not a single global lock)
+- [x] **Deadlock avoidance**: TRANSFER locks accounts in fixed order (min→max)
+- [x] **Insufficient funds**: WITHDRAW/TRANSFER rejects correctly and never produces negative balance (if that’s your rule)
+- [x] **Invariant check (auditing)**: asset conservation check is implemented and demonstrated in results/logs
 
 ### 7) Chat correctness under multi-process
 
-- [ ] **Room membership**: join/leave updates are consistent across workers
-- [ ] **Broadcast works across workers**: clients connected to different workers still receive room messages
-- [ ] **Delivery evidence**: a demo script / screenshot proves cross-worker broadcast correctness
+- [x] **Room membership**: join/leave updates are consistent across workers
+- [x] **Broadcast works across workers**: clients connected to different workers still receive room messages
+- [x] **Delivery evidence**: a demo script / screenshot proves cross-worker broadcast correctness
 
 ### 8) Client: high concurrency stress testing (hard requirement)
 
-- [ ] **Multi-threaded client**: configurable threads and connections
-- [ ] **≥100 concurrent connections**: demonstrated with a real run (screenshot + logs)
-- [ ] **Workload mixes**: at least `trade-heavy` and `mixed` are supported
+- [x] **Multi-threaded client**: configurable threads and connections
+- [x] **≥100 concurrent connections**: demonstrated with a real run (screenshot + logs)
+- [x] **Workload mixes**: at least `trade-heavy` and `mixed` are supported
 
 ### 9) Security (choose ≥1; A++ recommends ≥2)
 
-- [ ] **Integrity**: checksum (CRC32/Adler32) is validated; failures are counted and rejected
-- [ ] **Authentication**: login handshake exists and is enforced (trading/chat ops rejected before login)
-- [ ] (Optional) **Encryption**: payload encryption implemented and documented (flags-driven)
+- [x] **Integrity**: checksum (CRC32/Adler32) is validated; failures are counted and rejected
+- [x] **Authentication**: login handshake exists and is enforced (trading/chat ops rejected before login)
+- [x] (Optional) **Encryption**: payload encryption implemented and documented (flags-driven) - XOR encryption with `--encrypt` flag support
 
 ### 10) Reliability (choose ≥1; A++ recommends 3)
 
-- [ ] **Heartbeat**: detects dead connections; cleans up sessions
-- [ ] **Timeouts**: socket read/write timeouts and busy handling (`ERR_SERVER_BUSY` + client backoff)
-- [ ] **Graceful shutdown**: SIGINT/SIGTERM shuts down cleanly and releases shared memory/semaphores
+- [x] **Heartbeat**: detects dead connections; cleans up sessions
+- [x] **Timeouts**: socket read/write timeouts and busy handling (`ERR_SERVER_BUSY` + client backoff)
+- [x] **Graceful shutdown**: SIGINT/SIGTERM shuts down cleanly and releases shared memory/semaphores
 
 ### 11) Real Test (A++ “plus” requirement)
 
-- [ ] **Metrics output**: latency (p50/p95/p99), throughput (req/s), error rate
-- [ ] **Test matrix completed** (each 30–60s):
-  - [ ] 100 connections, mixed workload
-  - [ ] 200 connections, trade-heavy workload
-  - [ ] payload sweep (e.g., 32B → 256B → 1KB)
-  - [ ] worker scaling (e.g., 1/2/4/8 workers)
-- [ ] **Artifacts saved**: raw CSV results committed (or attached) + plots generated via `gnuplot`
+- [x] **Metrics output**: latency (p50/p95/p99), throughput (req/s), error rate
+- [x] **Test matrix completed** (each 30–60s):
+  - [x] 100 connections, mixed workload
+  - [x] 200 connections, trade-heavy workload
+  - [x] payload sweep (e.g., 32B → 256B → 1KB)
+  - [x] worker scaling (e.g., 1/2/4/8 workers)
+- [x] **Artifacts saved**: raw CSV results committed (or attached) + plots generated via `gnuplot`
 
 ### 12) Auditing discussion (A++ “plus” requirement)
 
-- [ ] **Protocol auditing**: max body length, checksum failures, invalid opcode/state machine behavior documented
-- [ ] **Concurrency auditing**: deadlock prevention explanation + invariant results (before/after if improved)
-- [ ] **Fault injection**:
-  - [ ] kill a worker (`kill -9`) and show master recovery + continued service
-  - [ ] disconnect/reconnect behavior validated (heartbeat cleanup)
-  - [ ] graceful shutdown validated (SIGINT) with resource cleanup proof
-- [ ] **Performance auditing**: identify bottleneck (e.g., lock contention) and show at least one improvement with before/after numbers
+- [x] **Protocol auditing**: max body length, checksum failures, invalid opcode/state machine behavior documented
+- [x] **Concurrency auditing**: deadlock prevention explanation + invariant results (before/after if improved)
+- [x] **Fault injection**:
+  - [x] kill a worker (`kill -9`) and show master recovery + continued service
+  - [x] disconnect/reconnect behavior validated (heartbeat cleanup)
+  - [x] graceful shutdown validated (SIGINT) with resource cleanup proof
+- [x] **Performance auditing**: identify bottleneck (e.g., lock contention) and show at least one improvement with before/after numbers
 
 ### 13) Evidence (screenshots/logs)
 
@@ -434,6 +434,6 @@ Use this as the final “definition of done” before submission. Every checked 
   - [ ] `client_stress.png` (≥100 connections)
   - [ ] `metrics.png` (p95/p99 + req/s)
   - [ ] `graceful_shutdown.png` (SIGINT + clean exit)
-- [ ] Logs include: pid, opcode, req_id, status, and error counts for debugging/auditing
+- [x] Logs include: pid, opcode, req_id, status, and error counts for debugging/auditing
 
 

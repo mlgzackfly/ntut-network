@@ -1,13 +1,13 @@
-2025-12-22 11:23:52.324 [server] pid=355937 INFO src/server/shm_state.c:100: Initialized shared memory state (nonce=11399198084828714641)
-2025-12-22 11:23:52.324 [server] pid=355937 WARN src/common/net.c:68: SO_REUSEPORT failed: Operation not supported
-2025-12-22 11:23:52.324 [server] pid=355937 INFO src/server/main.c:122: Server starting: port=9000 workers=4 shm=/ns_trading_chat
-2025-12-22 11:23:52.325 [server-w0] pid=355939 INFO src/server/worker.c:500: Worker started (pid=355939)
-2025-12-22 11:23:52.325 [server-w1] pid=355940 INFO src/server/worker.c:500: Worker started (pid=355940)
-2025-12-22 11:23:52.325 [server-w2] pid=355941 INFO src/server/worker.c:500: Worker started (pid=355941)
-2025-12-22 11:23:52.325 [server-w3] pid=355942 INFO src/server/worker.c:500: Worker started (pid=355942)
-2025-12-22 11:25:23.172 [server] pid=355937 INFO src/server/main.c:183: Shutting down...
-2025-12-22 11:25:28.178 [server] pid=355937 WARN src/server/main.c:203: Worker 0 (pid=355939) did not exit gracefully, sending SIGKILL
-2025-12-22 11:25:33.185 [server] pid=355937 WARN src/server/main.c:203: Worker 1 (pid=355940) did not exit gracefully, sending SIGKILL
-2025-12-22 11:25:38.191 [server] pid=355937 WARN src/server/main.c:203: Worker 2 (pid=355941) did not exit gracefully, sending SIGKILL
-2025-12-22 11:25:43.197 [server] pid=355937 WARN src/server/main.c:203: Worker 3 (pid=355942) did not exit gracefully, sending SIGKILL
-2025-12-22 11:25:43.199 [server] pid=355937 INFO src/server/main.c:219: Shutdown complete.
+2025-12-22 13:32:23.109 [server] pid=429593 INFO src/server/shm_state.c:100: Initialized shared memory state (nonce=11399162866071809744)
+2025-12-22 13:32:23.110 [server] pid=429593 WARN src/common/net.c:68: SO_REUSEPORT failed: Operation not supported
+2025-12-22 13:32:23.110 [server] pid=429593 INFO src/server/main.c:133: Server starting: port=9000 workers=4 shm=/ns_trading_chat
+2025-12-22 13:32:23.110 [server-w0] pid=429595 INFO src/server/worker.c:500: Worker started (pid=429595)
+2025-12-22 13:32:23.110 [server-w1] pid=429596 INFO src/server/worker.c:500: Worker started (pid=429596)
+2025-12-22 13:32:23.111 [server-w2] pid=429597 INFO src/server/worker.c:500: Worker started (pid=429597)
+2025-12-22 13:32:23.111 [server-w3] pid=429598 INFO src/server/worker.c:500: Worker started (pid=429598)
+2025-12-22 13:33:54.002 [server] pid=429593 INFO src/server/main.c:194: Shutting down...
+2025-12-22 13:33:59.008 [server] pid=429593 WARN src/server/main.c:214: Worker 0 (pid=429595) did not exit gracefully, sending SIGKILL
+2025-12-22 13:34:04.014 [server] pid=429593 WARN src/server/main.c:214: Worker 1 (pid=429596) did not exit gracefully, sending SIGKILL
+2025-12-22 13:34:09.021 [server] pid=429593 WARN src/server/main.c:214: Worker 2 (pid=429597) did not exit gracefully, sending SIGKILL
+2025-12-22 13:34:14.030 [server] pid=429593 WARN src/server/main.c:214: Worker 3 (pid=429598) did not exit gracefully, sending SIGKILL
+2025-12-22 13:34:14.031 [server] pid=429593 INFO src/server/main.c:230: Shutdown complete.

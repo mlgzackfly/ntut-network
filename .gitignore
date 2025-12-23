@@ -8,3 +8,4 @@ lib/
 results/*.log
 results/*.csv
 results/*.txt
+results/*.png

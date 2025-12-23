@@ -51,8 +51,22 @@ static int log_fatal_errno(const char *msg) {
 
 static void usage(const char *prog) {
   fprintf(stderr,
-          "Usage: %s [--bind 0.0.0.0] [--port 9000] [--workers 4] [--shm /ns_shm]\n",
-          prog);
+          "Usage: %s [--bind 0.0.0.0] [--port 9000] [--workers 4] [--shm /ns_shm]\n"
+          "\n"
+          "Environment variables (override defaults, overridden by CLI args):\n"
+          "  NS_BIND_IP              Bind IP address (default: 0.0.0.0)\n"
+          "  NS_PORT                 Port number (default: 9000)\n"
+          "  NS_WORKERS              Number of worker processes (default: 4, range: 1-1024)\n"
+          "  NS_SHM_NAME             Shared memory name (default: /ns_trading_chat)\n"
+          "  NS_MAX_BODY_LEN         Max message body length (default: 65536, range: 1024-1048576)\n"
+          "  NS_MAX_CONN_PER_WORKER  Max connections per worker (default: 1000, range: 1-100000)\n"
+          "  NS_RECV_TIMEOUT_MS      Receive timeout in ms (default: 30000, range: 100-3600000)\n"
+          "  NS_SEND_TIMEOUT_MS      Send timeout in ms (default: 30000, range: 100-3600000)\n"
+          "\n"
+          "Example:\n"
+          "  NS_WORKERS=8 NS_PORT=8080 %s\n"
+          "  %s --port 9000 --workers 4\n",
+          prog, prog, prog);
 }
 
 static uint16_t parse_u16(const char *s, uint16_t def) {
@@ -84,6 +98,30 @@ int main(int argc, char **argv) {
   cfg.send_timeout_ms = 30000; // 30 seconds
 
   // Allow env overrides for quick tuning without recompiling.
+  // Network settings
+  const char *env_bind = getenv("NS_BIND_IP");
+  if (env_bind && *env_bind != '\0') {
+    cfg.bind_ip = env_bind;
+  }
+  
+  const char *env_port = getenv("NS_PORT");
+  if (env_port && *env_port != '\0') {
+    cfg.port = parse_u16(env_port, cfg.port);
+  }
+  
+  // Worker settings
+  cfg.workers = parse_env_i("NS_WORKERS", cfg.workers, 1, 1024);
+  
+  // Shared memory settings
+  const char *env_shm = getenv("NS_SHM_NAME");
+  if (env_shm && *env_shm != '\0') {
+    cfg.shm_name = env_shm;
+  }
+  
+  // Protocol settings
+  cfg.max_body_len = parse_env_i("NS_MAX_BODY_LEN", cfg.max_body_len, 1024, 1048576);
+  
+  // Connection settings
   cfg.max_connections_per_worker = parse_env_i("NS_MAX_CONN_PER_WORKER", cfg.max_connections_per_worker, 1, 100000);
   cfg.recv_timeout_ms = parse_env_i("NS_RECV_TIMEOUT_MS", cfg.recv_timeout_ms, 100, 3600000);
   cfg.send_timeout_ms = parse_env_i("NS_SEND_TIMEOUT_MS", cfg.send_timeout_ms, 100, 3600000);

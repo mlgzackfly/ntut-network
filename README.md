@@ -15,6 +15,8 @@ Key OS/architecture focus:
 - **A++ extras**: Real Test + Auditing discussion (fault injection + analysis)
 
 > 🚀 **New!** Check out our [**Features Showcase**](docs/FEATURES_SHOWCASE.md) to see the trading system in action!
+>
+> 🔐 **Authentication**: Learn about our nonce + hash login handshake mechanism in the [**Authentication Guide**](docs/AUTHENTICATION.md)
 
 ---
 

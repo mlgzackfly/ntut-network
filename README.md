@@ -402,6 +402,7 @@ Put screenshots under `docs/screenshots/` (suggested filenames):
   - Documentation & evidence:
     - `README.md`、`USAGE_ZH.md`、部分 `AUDITING.md` 內容整理
     - 截圖與證據說明：`docs/screenshots/README.md` 及實際截圖規劃
+    - Slides製作
 
 - **guan4tou2**
   - Client & stress testing:
